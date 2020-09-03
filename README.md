@@ -1,3 +1,6 @@
+[![PyPI version](https://badge.fury.io/py/separatrice.svg)](https://badge.fury.io/py/separatrice)
+
+
 ## Separatrice
 
 Separatrice is able to split a text into sentences and a sentence into clauses (russian). This approach uses regular exression and
