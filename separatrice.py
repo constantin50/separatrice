@@ -1,3 +1,8 @@
+'''
+Constantin Werner 01.09.2020
+const.werner@gmail.com
+'''
+
 import re
 import pymorphy2
 
@@ -13,13 +18,14 @@ class Separatrice:
     self.morph = pymorphy2.MorphAnalyzer()
   
   def into_sents(self,text):
+    flag = False
     if text[-1] != '.' and text[-1] != '!' and text[-1] != '?':
       text += '.'
+      flag = True
     text = " " + text + "  "
     text = text.replace("\n"," ")
     text = re.sub(' '+self.prefixes,"\\1<prd>",text)
     text = re.sub(self.websites,"<prd>\\1",text)
-    print(text)
     if "Ph.D" in text: text = text.replace("Ph.D.","Ph<prd>D<prd>")
     text = re.sub("\s" + self.alphabets + "[.] "," \\1<prd> ",text)
     text = re.sub(self.acronyms+" "+self.starters,"\\1<stop> \\2",text)
@@ -38,62 +44,127 @@ class Separatrice:
     text = text.replace("<prd>",".")
     sentences = text.split("<stop>")
     sentences = sentences[:-1]
-    sentences = [s.strip() for s in sentences]
+    if (flag == True):
+      sentences[-1] = sentences[-1][:-1]
+    sentences = [s.strip() for s in sentences if s not in ["!","?",'.']]
     return sentences
   
-  def _pred_in(self,text):
+  # check whether or not text contains predicate
+  def _pred_in(self,text,subj_required=False):
+    '''
+    params
+    ---
+    text : str
+
+    return
+    ---
+    bool
+    '''
     tokenized = text.strip(' ').split(' ')
     noun = False
     pron = False
     adj = False
     prt = False
+    verb = False
     for word in tokenized:
       word = word.strip('.')
       word = word.strip('!')
       word = word.strip('?')
       word = word.strip(',')
-      if 'NOUN' in self.morph.parse(word)[0].tag:
-        noun = True
-      if 'NPRO' in self.morph.parse(word)[0].tag:
+      if ('VERB' in self.morph.parse(word)[0].tag or 'INFN' in self.morph.parse(word)[0].tag or 'PRED' in self.morph.parse(word)[0].tag
+            or 'нет' == word or 'здесь' == word or 'тут' == word):
+          return True
+      if ('это' == word):
         pron = True
-      elif 'ADJF' in self.morph.parse(word)[0].tag or 'ADJS' in self.morph.parse(word)[0].tag:
+      elif ('ADJF' in self.morph.parse(word)[0].tag or 'ADJS' in self.morph.parse(word)[0].tag):
         adj = True
+      elif (len(self.morph.parse(word)) > 1):
+        if ('ADJF' in self.morph.parse(word)[1].tag or 'ADJS' in self.morph.parse(word)[1].tag):
+          adj = True
+        elif 'NOUN' in self.morph.parse(word)[0].tag:
+          noun = True
+      elif 'NOUN' in self.morph.parse(word)[0].tag and 'nomn' in self.morph.parse(word)[0].tag:
+        noun = True
+      elif 'NPRO' in self.morph.parse(word)[0].tag:
+        pron = True
       elif 'PRTF' in self.morph.parse(word)[0].tag or 'PRTS' in self.morph.parse(word)[0].tag:
         prt = True
-      elif 'VERB' in self.morph.parse(word)[0].tag or 'INFN' in self.morph.parse(word)[0].tag or 'PRED' in self.morph.parse(word)[0].tag:
-        #print(text, ' has a pred')
-        return True
       if len(self.morph.parse(word)) > 1:
-        if 'VERB' in self.morph.parse(word)[1].tag:
-          #print(text, ' has a pred')
+        if ('VERB' in self.morph.parse(word)[1].tag):
           return True
-    if ((noun == True or pron == True) and adj == True):
-      return True
-    if ((noun == True or pron == True) and prt == True):
+
+    if ((noun == True or pron == True) and (adj == True or prt == True or verb == True)):
       return True
     if (noun == True and pron == True):
       return True
+
     return False
   
-  def _util(self,text):
+  # split by delim and check which pieces are true clauses 
+  def separate_by(self,delim,text,subj_required=False):
+    '''
+    params
+    ---
+    text : str
+
+    return
+    ---
+    result : list of str
+    '''
     result = []
-    cands = re.split(',',text)
-    for i in range(len(cands)):
-      if self._pred_in(cands[i]) == False:
-        if cands[i-1] in result:
-          result.remove(cands[i-1])
-        result.append(cands[i-1] + ' ' + cands[i])
-      else:
-        result.append(cands[i])
+    cands = [cand for cand in re.split(delim,text) if cand != ' ']
+    appended = [False]*len(cands)
+    if (len(cands) > 1):
+      for i in range(1,len(cands)):
+        if self._pred_in(cands[i]) == False:
+          if cands[i-1] in result:
+            result.remove(cands[i-1])
+          result.append(cands[i-1] + delim + cands[i])
+          cands[i] = cands[i-1] + delim + cands[i]
+          appended[i] = True
+          appended[i-1] = True
+        else:
+          result.append(cands[i])
+          appended[i] = True
+      if (appended[0] == False):
+        if self._pred_in(cands[0]) ==True:
+          result.insert(0,cands[0])
+        else:
+          result[0] = cands[0] + delim + result[0]
+      return result
+    result = cands
     return result
 
   def into_clauses(self,text):
+    '''
+    params
+    ---
+    text : str
+    
+    return
+    ---
+    clauses : list of str 
+    '''
     text = ' ' + text + ' '
     text = re.sub(', ' + self.conjs + ' | ' + self.conjs + ' ', '<stop>',text)
     clauses = text.split('<stop>')
     temp = []
-    for clause in clauses:
-      for x in self._util(clause):
-        temp.append(x.strip(' '))
-    return [x for x in temp if x != '']
+    if ';' in text:
+      temp = []
+      for clause in clauses:
+        for x in self.separate_by(';',clause):
+          temp.append(x.strip(' '))
+      clauses = [x for x in temp if x != '']
+    if ' - ' in text:
+      temp = []
+      for clause in clauses:
+        for x in self.separate_by('-',clause):
+          temp.append(x.strip(' '))
+      clauses = [x for x in temp if x != '']
+    if ',' in text:
+      for clause in clauses:
+        for x in self.separate_by(',',clause):
+          temp.append(x.strip(' '))
+      clauses = [x  for x in temp if x != '']
+    return [clause.strip() for clause in clauses]
 
