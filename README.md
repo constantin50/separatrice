@@ -28,7 +28,7 @@ It needs to say that a nortion of clause is debatable. In my project I assume th
 implicitly. For example, "Это мой друг, он бегает по утрам.". The first clause 'Это мой друг' contains an implicite verb 'быть', whereas the second one
 is with an explicite verb 'бегать'.
 
-So, as validation data I use sentences from social media and Q&A dialogs.
+So, as validation data I use sentences from social media and Q&A dialogs. <b>Accuracy</b> is <b>0.92</b>
 
 Main problem is the omitting comma with сonjunction 'и'. Like
 
