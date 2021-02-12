@@ -1,10 +1,8 @@
-'''
-Constantin Werner 01.09.2020
-const.werner@gmail.com
-'''
-
 import re
 import pymorphy2
+import nltk
+#nltk.download('punkt')
+from nltk.tokenize import word_tokenize
 
 class Separatrice:
   def __init__(self):
@@ -14,7 +12,7 @@ class Separatrice:
     self.starters = "(Mr|Mrs|Ms|Dr)"
     self.websites = "[.](com|net|org|io|gov|ru|xyz|ру)"
     self.suffixes = "(Inc|Ltd|Jr|Sr|Co)"
-    self.conjs = '(чтобы|когда|несмотря на то что|вопреки|а также|либо|но|зато|а|тогда|а то|так что|чтоб|затем|дабы|коль скоро|если бы|если б|коль скоро|тогда как|как только|подобно тому как|будто бы)'
+    self.conjs = '(, что|чтобы|, когда| несмотря на то что| вопреки|, а также| либо| но| зато|, а| тогда|, а то| так что| чтоб| затем| дабы| коль скоро| если бы| если б| коль скоро| тогда как| как только| подобно тому как| будто бы)'
     self.morph = pymorphy2.MorphAnalyzer()
   
   def into_sents(self,text):
@@ -38,9 +36,9 @@ class Separatrice:
     if "\"" in text: text = text.replace(".\"","\".")
     if "!" in text: text = text.replace("!\"","\"!")
     if "?" in text: text = text.replace("?\"","\"?")
-    text = text.replace(".",".<stop>")
-    text = text.replace("?","?<stop>")
-    text = text.replace("!","!<stop>")
+    text = text.replace(". ",".<stop>")
+    text = text.replace("? ","?<stop>")
+    text = text.replace("! ","!<stop>")
     text = text.replace("<prd>",".")
     sentences = text.split("<stop>")
     sentences = sentences[:-1]
@@ -49,13 +47,29 @@ class Separatrice:
     sentences = [s.strip() for s in sentences if s not in ["!","?",'.']]
     return sentences
   
+  def introductory_phrase(self, sent):
+    tokens = word_tokenize(sent)
+    comma = False
+    i = 0
+    tag = self.morph.parse(tokens[i])[0].tag
+    while (('NOUN' in tag or 'ADJS' in tag or 'ADJF' in tag or 'ADJS' in tag or 'NPRO' in tag) or tokens[i] == ','):
+        if (tokens[i] == ','):
+          comma = True
+          break
+        i += 1
+        tag = self.morph.parse(tokens[i])[0].tag
+
+    if comma:    
+      return ' '.join(tokens[:i])
+    else:
+      return '' 
+  
   # check whether or not text contains predicate
   def _pred_in(self,text,subj_required=False):
     '''
     params
     ---
     text : str
-
     return
     ---
     bool
@@ -106,7 +120,6 @@ class Separatrice:
     params
     ---
     text : str
-
     return
     ---
     result : list of str
@@ -145,26 +158,46 @@ class Separatrice:
     ---
     clauses : list of str 
     '''
+    
+    # FIRSTLY CHECK INTRODUCTORY PHRASES, e.g. "Ребят, где тут мост?", "Привет, как там с деньгами?"
+    introductory_phrase = self.introductory_phrase(text)
+    if introductory_phrase != '':
+      text = re.sub(introductory_phrase, '', text)
+
     text = ' ' + text + ' '
-    text = re.sub(', ' + self.conjs + ' | ' + self.conjs + ' ', '<stop>',text)
+    text = re.sub(self.conjs + ' ', '<stop>',text)
     clauses = text.split('<stop>')
     temp = []
+
+    if ',' in text:
+      temp = []
+      for clause in clauses:
+        for x in self.separate_by(',',clause):
+          temp.append(x.strip(' ').strip(','))
+      clauses = [x  for x in temp if x != '']
+
+    if ' и ' in text:
+      temp = []
+      for clause in clauses:
+        for x in self.separate_by(' и ',clause):
+          temp.append(x.strip(' ').strip(','))
+      clauses = [x for x in temp if x != '']
+
     if ';' in text:
       temp = []
       for clause in clauses:
         for x in self.separate_by(';',clause):
-          temp.append(x.strip(' '))
+          temp.append(x.strip(' ').strip(','))
       clauses = [x for x in temp if x != '']
     if ' - ' in text:
       temp = []
       for clause in clauses:
         for x in self.separate_by('-',clause):
-          temp.append(x.strip(' '))
+          temp.append(x.strip(' ').strip(','))
       clauses = [x for x in temp if x != '']
-    if ',' in text:
-      for clause in clauses:
-        for x in self.separate_by(',',clause):
-          temp.append(x.strip(' '))
-      clauses = [x  for x in temp if x != '']
-    return [clause.strip() for clause in clauses]
+
+    clauses = [clause.strip() for clause in clauses if clause.strip() != '']
+    if introductory_phrase != '':
+      clauses.insert(0,introductory_phrase)
+    return clauses
 
