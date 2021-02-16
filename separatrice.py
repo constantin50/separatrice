@@ -13,6 +13,7 @@ class Separatrice:
     self.websites = "[.](com|net|org|io|gov|ru|xyz|ру)"
     self.suffixes = "(Inc|Ltd|Jr|Sr|Co)"
     self.conjs = '(, что|чтобы|, когда| несмотря на то что| вопреки|, а также| либо| но| зато|, а| тогда|, а то| так что| чтоб| затем| дабы| коль скоро| если бы| если б| коль скоро| тогда как| как только| подобно тому как| будто бы)'
+    self.introductory = '(вот где где,|не-а,|и ещё|во-первых|во-вторых|конечно|несомненно|без всякого сомнения|очевидно|безусловно|разумеется|само собой разумеется|бесспорно|действительно,|наверное|возможно|верно|вероятно|по всей вероятности|может быть|быть может|должно быть|кажется|казалось бы|видимо|по-видимому|пожалуйста|в самом деле|подлинно|правда|не правда ли|в сущности|по существу|по сути|надо полагать|к счастью|к несчастью|по счастью|по несчастью|к радости|к огорчению|к прискорбию|к досаде|к сожалению|к удивлению|к изумлению|к ужасу|к стыду|говорят|сообщают|передают|по словам|по сообщению|по сведениям|по мнению|по-моему|по-твоему|по-нашему|по-вашему|на мой взгляд|по слухам|по преданию|помнится|слышно|дескать|говорят|сообщают|передают|по словам|по сообщению|по сведениям|по мнению|по-моему|по-твоему|по-нашему|по-вашему|на мой взгляд|по слухам|по преданию|помнится|слышно|дескать|словом|одним словом|иными словами|другими словами|иначе говоря|коротко говоря|попросту сказать|мягко выражаясь|если можно так сказать|если можно так выразиться|с позволения сказать|лучше сказать|так сказать|что называется и другие; слова собственно|вообще|вернее|точнее|скорее |видишь ли|видите ли|понимаешь ли|понимаете ли|знаешь ли|знаете ли|пойми|поймите|поверьте|послушайте|согласитесь|вообразите|представьте себе|извините|простите|веришь ли|верите ли|пожалуйста|спасибо|привет|пасиб|прив|здравствуйте|доброго дня|доброго вечера)'
     self.morph = pymorphy2.MorphAnalyzer()
   
   def into_sents(self,text):
@@ -56,8 +57,11 @@ class Separatrice:
         if (tokens[i] == ','):
           comma = True
           break
-        i += 1
-        tag = self.morph.parse(tokens[i])[0].tag
+        if i < len(tokens)-1:
+          i += 1
+          tag = self.morph.parse(tokens[i])[0].tag
+        else:
+          break
 
     if comma:    
       return ' '.join(tokens[:i])
@@ -86,7 +90,7 @@ class Separatrice:
       word = word.strip('?')
       word = word.strip(',')
       if ('VERB' in self.morph.parse(word)[0].tag or 'INFN' in self.morph.parse(word)[0].tag or 'PRED' in self.morph.parse(word)[0].tag
-            or 'нет' == word or 'здесь' == word or 'тут' == word):
+            or 'нет' == word or 'здесь' == word or 'тут' == word or '-' == word or '—' == word):
           return True
       if ('это' == word):
         pron = True
@@ -166,6 +170,11 @@ class Separatrice:
 
     text = ' ' + text + ' '
     text = re.sub(self.conjs + ' ', '<stop>',text)
+    temp = re.findall(self.introductory,text.lower())
+    for t in temp:
+      if t.capitalize() in text: t = t.capitalize()
+      if t.upper() in text: t = t.upper()
+      text = text[:text.index(t) - 1] + '<stop>' + text[text.index(t):text.index(t) + len(t)] + '<stop>' + text[text.index(t) + len(t):]
     clauses = text.split('<stop>')
     temp = []
 
@@ -189,6 +198,14 @@ class Separatrice:
         for x in self.separate_by(';',clause):
           temp.append(x.strip(' ').strip(','))
       clauses = [x for x in temp if x != '']
+
+    if ':' in text:
+      temp = []
+      for clause in clauses:
+        for x in self.separate_by(':',clause):
+          temp.append(x.strip(' ').strip(','))
+      clauses = [x for x in temp if x != '']
+
     if ' - ' in text:
       temp = []
       for clause in clauses:
